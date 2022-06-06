@@ -1,0 +1,110 @@
+import pyttsx3
+import json
+import speech_recognition as sr 
+import datetime
+import pandas as pd
+
+
+STORIES_FILE = "stories.json"
+stories = []
+with open(STORIES_FILE) as stories_file:
+    stories = json.load(stories_file)
+
+
+# setting up engine to Pyttsx3 for text to speech in Python
+engine = pyttsx3.init()
+engine.runAndWait()
+
+now = datetime.datetime.now()
+
+#create an empty list to store information of conversation
+def save_story(stories, username, utterance):
+    stories.append({"username":username, "utterance":utterance, "timestamp":str(datetime.datetime.now())})
+    with open(STORIES_FILE, "w") as stories_file:
+        json.dump(stories, stories_file)
+
+
+def speak(audio):
+    engine.say(audio)
+    engine.runAndWait()
+    print(audio)
+
+def wishMe():
+    hour = int(datetime.datetime.now().hour)
+
+    if hour>= 0 and hour<12:
+        speak("Good Morning!")
+  
+    elif hour>= 12 and hour<18:
+        speak("Good Afternoon!")  
+  
+    else:
+        speak("Good Evening!") 
+  
+    assistantname =("Anna")
+    speak("I am your personal storykeeper, " + assistantname)
+
+    
+def get_username():
+    speak("I would love to know more about you, so let's start off right away. What's your name?")
+    username = takeCommand()
+    speak("Nice to meet you " + username + ".")
+    
+    return username
+    
+def storykeepergoal():
+    speak("Would you like to know more about my goal to conserve your family's stories?")
+    utterance = takeCommand().lower() #All the commands said by user will be stored here in 'utterance' and will be converted to lower case for easily recognition of command
+    if "yes" in utterance:
+        speak("Happy that you are interested to learn more about me. You've probably experienced the moment at a family's birthday party when it's all about telling stories from when you were little, or a funny story about a vacation. As life goes on, those stories might be forgotten or cannot be told anymore. This is where I come in - by telling me stories about your favourite moments in life, I can store these forever. Your family can do the same thing. And if you would like to hear a story that your family members told me, you can tune in.")
+
+    else:
+        speak("Alright, as you wish.")
+
+def getstory(stories, username):
+    speak("I am curious to hear what memories and stories you have about your family. Please tell me your favourite memory with, or about your family.")
+
+    utterance = takeCommand().lower() #All the commands said by user will be stored here in 'utterance' and will be converted to lower case for easily recognition of command
+    save_story(stories, username, utterance)
+
+def takeCommand():
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Listening...")
+        r.pause_threshold = 1
+        audio = r.listen(source)
+  
+    try:
+        print("Recognizing...")   
+        utterance = r.recognize_google(audio, language ='en-GB')
+        print(f"User said: {utterance}\n")
+
+    except Exception as e:
+        print(e)   
+        speak("My apologies, I did not understand that. Could you please say that again?")
+        return "None"
+     
+    return utterance 
+
+def morestories():
+    while True:
+        speak("Thank you for telling me your story. Would you like to tell me another story with, or about your family?")
+        utterance2 = takeCommand().lower() #All the commands said by user will be stored here in 'utterance' and will be converted to lower case for easily recognition of command
+        if "yes" in utterance2:
+            speak("Go ahead, I'm all ears.")
+            utterance2 = takeCommand().lower() #All the commands said by user will be stored here in 'utterance' and will be converted to lower case for easily recognition of command
+            save_story(stories, username, utterance2)
+        #speak("Thank you for telling me another story. Speak to you soon, and have a great day.")
+
+        else:
+            speak("Alright, no problem. Speak to you soon, and have a great day.")
+            break
+
+wishMe()
+username = get_username()
+storykeepergoal()
+getstory(stories, username)
+morestories()
+
+stories_df = pd.read_json('C:\\Users\\leaba\\OneDrive\\Documents\\Graduation\\Prototype 2\\stories.json')
+print(stories_df.tail())

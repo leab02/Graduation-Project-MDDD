@@ -1,0 +1,167 @@
+from html import entities
+import pyttsx3
+import json
+import speech_recognition as sr 
+import datetime
+import requests
+import pandas as pd
+import spacy
+
+
+STORIES_FILE = "stories_2.json"
+stories = []
+with open(STORIES_FILE) as stories_file:
+    stories = json.load(stories_file)
+
+nlp = spacy.load("en_core_web_sm")
+
+# setting up engine to Pyttsx3 for text to speech in Python
+engine = pyttsx3.init()
+engine.runAndWait()
+
+now = datetime.datetime.now()
+
+# both scripts (prototpe 3 and rasa) are running simulatensoly
+def rasa(utterance):
+    """
+    Takes an utterance and requests rasa to classify it to one of the trained intents.
+    Assumes RASA is running on port 5005 with API enabled.
+    """
+    data = {"text":utterance, "message_id":"0"}
+    response = requests.post(url="http://localhost:5005/model/parse", json = data)
+    rasa_intents = response.json()
+    return rasa_intents
+
+#create an empty list to store information of conversation
+def save_story(stories, username, utterance, intents, entities):
+    """
+    Saves a story, composed of the complete text (utterance), intents (from RASA) and entities (from Spacy).
+    Saved to a file parsed as JSON, as an item of a list.
+    """
+    stories.append({
+        "username":username, 
+        "utterance":utterance, 
+        "timestamp":str(datetime.datetime.now()),
+        "intents":intents,
+        "entities":entities
+        })
+    with open(STORIES_FILE, "w") as stories_file:
+        json.dump(stories, stories_file)
+
+def speak(audio):
+    """
+    Allows the device to speak audio to the user.
+    """
+    engine.say(audio)
+    engine.runAndWait()
+    print(audio)
+
+
+def takeCommand():
+    """
+    Listens for user input using the microphone.
+    After utterance is recognised, the sentences are sent to RASA to determine any intents that were mentioned.
+    All text is tokenized and spacy attempts to recognize any entities.
+    Utterance, intents and entities are returned.
+    """
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Listening...")
+        r.pause_threshold = 1
+        audio = r.listen(source)
+  
+    try:
+        print("Recognizing...")   
+        utterance = r.recognize_google(audio, language ='en-US')
+        print(f"User said: {utterance}\n")
+        doc = nlp(utterance)
+        story_intents = []
+
+        for sentence in doc.sents:
+            intents = rasa(str(sentence))
+            story_intents += intents["intent"]["name"]
+        entities = []
+        for named_entity in doc.ents:
+            entities.append(named_entity.label_, named_entity.lemma_)
+
+
+    except Exception as e:
+        print(e)   
+        speak("My apologies, I did not understand that. Could you please say that again?")
+        return "None"
+     
+    return utterance, story_intents, entities
+
+
+def wishMe():
+    """
+    Greets the user by speaking the appropriate greeting based on the time of day.
+    """
+    hour = int(datetime.datetime.now().hour)
+
+    if hour>= 0 and hour<12:
+        speak("Good Morning!")
+  
+    elif hour>= 12 and hour<18:
+        speak("Good Afternoon!")  
+  
+    else:
+        speak("Good Evening!") 
+  
+    assistantname =("Anna")
+    speak("I am your personal storykeeper, " + assistantname)
+
+    
+def get_username():
+    """
+    Small intent to get to know the user by asking his/her name.
+    Speaks the question and opens the mic to let the user answer.
+    The answer is saved as the name of the user (username) in memory of the script.
+    """
+    speak("I would love to know more about you, so let's start off right away. What's your name?")
+    username, intents, entities = takeCommand()
+    speak("Nice to meet you " + username + ".")
+    #columns = shutil.get_terminal_size().columns
+     
+    #print("Welcome", username.center(columns))
+    return username
+    
+def storykeepergoal():
+    """
+    Determines whether or not the user wants to tell a story.
+    Speaks the question and listens for input from the user using takeCommand()
+    """
+    speak("Would you like to know more about my goal to conserve your family's stories?")
+    utterance,intents, entities = takeCommand() #All the commands said by user will be stored here in 'utterance' and will be converted to lower case for easily recognition of command
+    utterance = utterance.lower()
+    if "yes" in utterance:
+        speak("Happy that you are interested to learn more about me. You've probably experienced the moment at a family's birthday party when it's all about telling stories from when you were little, or a funny story about a vacation. As life goes on, those stories might be forgotten or cannot be told anymore. This is where I come in - by telling me stories about your favourite moments in life, I can store these forever. Your family can do the same thing.")
+        return True
+    else:
+        speak("Alright, no problem.")
+        return False
+
+def getstory(stories, username):
+    """
+    Asks the user to tell their story using takeCommand()
+    """
+    speak("I am curious to hear what memories and stories you have about your family. Please tell me your favourite memory with, or about your family.")
+
+    utterance, intents, entities = takeCommand() #All the commands said by user will be stored here in 'utterance' and will be converted to lower case for easily recognition of command
+    utterance = utterance.lower()
+    save_story(stories, username, utterance, intents, entities)
+
+
+def run_conversation():
+    """
+    Runs the whole conversation by running the intents one by one.
+    """
+    wishMe() #greet the user
+    username = get_username() #ask the user his/her name
+    user_wants_to_tell_story = storykeepergoal() #ask the user whether they want to tell a story
+    getstory(stories, username) #ask for the story
+
+
+run_conversation()
+stories_df = pd.read_json('C:\\Users\\leaba\\OneDrive\\Documents\\Graduation\\Technical Documentation\\Prototype 3\\stories_2.json')
+print(stories_df.head())
